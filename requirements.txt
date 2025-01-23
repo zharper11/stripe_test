@@ -1,0 +1,12 @@
+Flask==3.0.3
+Flask-Cors==5.0.0
+numpy==1.26.4
+openai==1.58.1
+pandas==2.2.3
+tiktoken==0.8.0
+scipy==1.14.1
+azure-cosmos==4.9.0
+aiohttp==3.11.4
+dataclasses-json==0.6.7
+stripe
+gunicorn
