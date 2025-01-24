@@ -197,14 +197,22 @@ def create_checkout_session():
     try:
         data = request.get_json()
         user_id = data.get('userId')
-
+        
+        logging.info(f"Creating checkout session for user: {user_id}")
+        
         if not user_id:
             return jsonify({"error": "User ID is required"}), 400
 
+        # Verify Stripe key is set
+        if not stripe.api_key:
+            logging.error("Stripe API key not set")
+            return jsonify({"error": "Stripe configuration error"}), 500
+
+        logging.info("Creating Stripe checkout session...")
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
-                'price': 'price_1Qjkn0ECtCMmOAVYVtQmrYtC',  # Replace with your Stripe price ID
+                'price': 'price_1Qjkn0ECtCMmOAVYVtQmrYtC',
                 'quantity': 1,
             }],
             mode='subscription',
@@ -212,9 +220,11 @@ def create_checkout_session():
             cancel_url = 'https://stripeteststorage1.z13.web.core.windows.net/taskpane.html?payment=canceled',
             client_reference_id=user_id,
         )
-
+        
+        logging.info(f"Checkout session created: {checkout_session.id}")
         return jsonify({'sessionId': checkout_session.id}), 200
     except Exception as e:
+        logging.error(f"Error creating checkout session: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/webhook', methods=['POST'])
