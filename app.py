@@ -195,20 +195,17 @@ stripe.api_key = os.getenv("STRIPE_KEY")
 @app.route('/api/create-checkout-session', methods=['POST'])
 def create_checkout_session():
     try:
+        if not stripe.api_key:
+            logging.error("Stripe API key not configured")
+            return jsonify({"error": "Stripe is not properly configured"}), 500
+            
         data = request.get_json()
         user_id = data.get('userId')
-        
-        logging.info(f"Creating checkout session for user: {user_id}")
-        
+
         if not user_id:
             return jsonify({"error": "User ID is required"}), 400
 
-        # Verify Stripe key is set
-        if not stripe.api_key:
-            logging.error("Stripe API key not set")
-            return jsonify({"error": "Stripe configuration error"}), 500
-
-        logging.info("Creating Stripe checkout session...")
+        # Create checkout session with modified success/cancel URLs
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
@@ -216,12 +213,11 @@ def create_checkout_session():
                 'quantity': 1,
             }],
             mode='subscription',
-            success_url='https://stripeteststorage1.z13.web.core.windows.net/taskpane.html?payment=success',
-            cancel_url = 'https://stripeteststorage1.z13.web.core.windows.net/taskpane.html?payment=canceled',
+            success_url='https://stripeteststorage1.z13.web.core.windows.net/taskpane.html?payment=success&dialogClose=true',
+            cancel_url='https://stripeteststorage1.z13.web.core.windows.net/taskpane.html?payment=canceled&dialogClose=true',
             client_reference_id=user_id,
         )
-        
-        logging.info(f"Checkout session created: {checkout_session.id}")
+
         return jsonify({'sessionId': checkout_session.id}), 200
     except Exception as e:
         logging.error(f"Error creating checkout session: {str(e)}", exc_info=True)
