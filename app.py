@@ -213,8 +213,8 @@ def create_checkout_session():
                 'quantity': 1,
             }],
             mode='subscription',
-            success_url='https://stripeteststorage1.z13.web.core.windows.net/taskpane.html?payment=success&dialogClose=true',
-            cancel_url='https://stripeteststorage1.z13.web.core.windows.net/taskpane.html?payment=canceled&dialogClose=true',
+            success_url='https://stripeteststorage1.z13.web.core.windows.net/checkout.html?payment=success',
+            cancel_url='https://stripeteststorage1.z13.web.core.windows.net/checkout.html?payment=canceled',
             client_reference_id=user_id,
         )
 
