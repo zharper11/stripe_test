@@ -222,7 +222,6 @@ def create_checkout_session():
     except Exception as e:
         logging.error(f"Error creating checkout session: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
 @app.route('/api/webhook', methods=['POST'])
 def webhook():
     payload = request.get_data()
@@ -281,7 +280,21 @@ def verify_subscription(user_id):
     except Exception as e:
         logging.error(f"Error verifying subscription: {e}")
         return False
-
+@app.route('/api/check_subscription', methods=['GET'])
+def check_subscription():
+    user_id = request.args.get('userId')
+    
+    if not user_id:
+        return jsonify({"error": "userId is required"}), 400
+        
+    try:
+        # Use the existing verify_subscription function
+        is_subscribed = verify_subscription(user_id)
+        return jsonify({"isSubscribed": is_subscribed}), 200
+        
+    except Exception as e:
+        logging.error(f"Error checking subscription status: {e}")
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/uniqueness', methods=['POST'])
 def analyze_uniqueness():
     try:
