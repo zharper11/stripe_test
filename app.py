@@ -209,7 +209,7 @@ def create_checkout_session():
         checkout_session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
-                'price': 'price_1Qjkn0ECtCMmOAVYVtQmrYtC',
+                'price': 'price_1QmbjGECtCMmOAVYvwxIRQc4',
                 'quantity': 1,
             }],
             mode='subscription',
