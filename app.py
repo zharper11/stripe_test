@@ -213,6 +213,9 @@ def create_checkout_session():
                 'quantity': 1,
             }],
             mode='subscription',
+            discounts=[{
+                'coupon': 'promo_1QmXtaECtCMmOAVYPX2EbGEW',
+              }],
             success_url='https://stripeteststorage1.z13.web.core.windows.net/checkout.html?payment=success',
             cancel_url='https://stripeteststorage1.z13.web.core.windows.net/checkout.html?payment=canceled',
             client_reference_id=user_id,
