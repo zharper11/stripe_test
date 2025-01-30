@@ -15,6 +15,7 @@ import stripe
 from azure.cosmos import CosmosClient, PartitionKey
 import sys
 from parallel_api import process_json
+import traceback
 
 # Configuration
 app = Flask(__name__)
@@ -224,36 +225,154 @@ def create_checkout_session():
         return jsonify({"error": str(e)}), 500
 @app.route('/api/webhook', methods=['POST'])
 def webhook():
-    payload = request.get_data()
-    sig_header = request.headers.get('Stripe-Signature')
-
+    logging.info("🔔 Webhook request received")
     try:
+        # Log request details
+        payload = request.get_data()
+        sig_header = request.headers.get('Stripe-Signature')
+        
+        logging.info("📨 Request Headers:")
+        for key, value in request.headers.items():
+            if key.lower() not in ['authorization', 'stripe-signature']:  # Skip sensitive headers
+                logging.info(f"   {key}: {value}")
+        
+        logging.info(f"📦 Payload size: {len(payload)} bytes")
+        logging.info(f"🔑 Signature header present: {bool(sig_header)}")
+        
+        webhook_secret = os.getenv("WEBHOOK_SECRET")
+        logging.info(f"🔐 Webhook secret configured: {bool(webhook_secret)}")
+
+        if not webhook_secret:
+            logging.error("❌ WEBHOOK_SECRET environment variable not set")
+            return jsonify({'error': 'Webhook secret not configured'}), 500
+
+        # Verify webhook
+        logging.info("🔍 Verifying webhook signature...")
         event = stripe.Webhook.construct_event(
-            payload, sig_header, os.getenv("WEBHOOK_SECRET")
+            payload, sig_header, webhook_secret
         )
+        logging.info(f"✅ Webhook verified successfully")
+        logging.info(f"📝 Event type: {event['type']}")
+        logging.info(f"🆔 Event ID: {event.get('id', 'N/A')}")
 
         if event['type'] == 'checkout.session.completed':
             session = event['data']['object']
-            user_id = session['client_reference_id']
-            subscription_id = session['subscription']
+            logging.info("💳 Processing checkout.session.completed event")
+            logging.info(f"📋 Session ID: {session.get('id', 'N/A')}")
+            
+            user_id = session.get('client_reference_id')
+            subscription_id = session.get('subscription')
+            
+            logging.info(f"👤 User ID: {user_id}")
+            logging.info(f"📌 Subscription ID: {subscription_id}")
 
-            # Update subscription in Cosmos DB
+            if not user_id or not subscription_id:
+                logging.error("❌ Missing user_id or subscription_id in session")
+                return jsonify({'error': 'Invalid session data'}), 400
+
+            # Update Cosmos DB
+            logging.info(f"🔄 Querying CosmosDB for user: {user_id}")
             query = f"SELECT * FROM c WHERE c.userId = '{user_id}'"
             items = list(container.query_items(query=query, enable_cross_partition_query=True))
             
             if items:
+                logging.info("✅ User document found in CosmosDB")
                 doc = items[0]
-                doc['subscription'] = {
+                
+                subscription_data = {
                     'active': True,
                     'subscriptionId': subscription_id,
                     'startDate': datetime.utcnow().isoformat(),
                     'endDate': (datetime.utcnow() + timedelta(days=365)).isoformat()
                 }
-                container.upsert_item(doc)
+                
+                logging.info(f"📝 Updating subscription data: {json.dumps(subscription_data, indent=2)}")
+                doc['subscription'] = subscription_data
+                
+                try:
+                    container.upsert_item(doc)
+                    logging.info("✅ Successfully updated subscription in CosmosDB")
+                except Exception as db_error:
+                    logging.error(f"❌ Failed to update CosmosDB: {str(db_error)}")
+                    logging.error(f"Stack trace: {traceback.format_exc()}")
+                    raise
+            else:
+                logging.error(f"❌ No document found for user: {user_id}")
+                return jsonify({'error': 'User not found'}), 404
 
         return jsonify({'status': 'success'}), 200
+        
+    except stripe.error.SignatureVerificationError as e:
+        logging.error(f"❌ Webhook signature verification failed: {str(e)}")
+        logging.error(f"Stack trace: {traceback.format_exc()}")
+        return jsonify({'error': 'Invalid signature'}), 400
+        
     except Exception as e:
+        logging.error(f"❌ Webhook processing error: {str(e)}")
+        logging.error(f"Stack trace: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 400
+
+# Test endpoint to simulate webhook events
+@app.route('/api/test-webhook', methods=['POST'])
+def test_webhook():
+    """
+    Test endpoint to simulate Stripe webhook events without making a purchase.
+    Example usage:
+    curl -X POST http://your-api/api/test-webhook 
+         -H "Content-Type: application/json" 
+         -d '{"userId": "test_user_123"}'
+    """
+    try:
+        logging.info("🧪 Test webhook request received")
+        data = request.get_json()
+        user_id = data.get('userId')
+        
+        if not user_id:
+            logging.error("❌ No user_id provided in test request")
+            return jsonify({'error': 'user_id is required'}), 400
+            
+        logging.info(f"🧪 Creating test subscription for user: {user_id}")
+        
+        # Query existing user
+        query = f"SELECT * FROM c WHERE c.userId = '{user_id}'"
+        items = list(container.query_items(query=query, enable_cross_partition_query=True))
+        
+        if not items:
+            logging.error(f"❌ No document found for user: {user_id}")
+            return jsonify({'error': 'User not found'}), 404
+            
+        # Create test subscription
+        test_subscription_id = f"test_sub_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        doc = items[0]
+        
+        subscription_data = {
+            'active': True,
+            'subscriptionId': test_subscription_id,
+            'startDate': datetime.utcnow().isoformat(),
+            'endDate': (datetime.utcnow() + timedelta(days=365)).isoformat()
+        }
+        
+        logging.info(f"📝 Test subscription data: {json.dumps(subscription_data, indent=2)}")
+        doc['subscription'] = subscription_data
+        
+        try:
+            container.upsert_item(doc)
+            logging.info("✅ Successfully created test subscription")
+            return jsonify({
+                'status': 'success',
+                'message': 'Test subscription created',
+                'subscription_id': test_subscription_id,
+                'subscription_data': subscription_data
+            }), 200
+        except Exception as db_error:
+            logging.error(f"❌ Failed to update CosmosDB: {str(db_error)}")
+            logging.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': str(db_error)}), 500
+            
+    except Exception as e:
+        logging.error(f"❌ Test webhook error: {str(e)}")
+        logging.error(f"Stack trace: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 def verify_subscription(user_id):
     try:
         query = f"SELECT * FROM c WHERE c.userId = '{user_id}'"
