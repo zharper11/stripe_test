@@ -494,7 +494,7 @@ def analyze_uniqueness():
 
         # Calculate z-scores
         df_item['mean_z_score'] = (df_item['mean_distance'] - overall_mean) / df_item['mean_distance_std']
-        df_item['zero_z_score'] = (-df_item['mean_distance'] - overall_min) / df_item['LHS_std']
+        df_item['zero_z_score'] = (df_item['mean_distance'] - overall_min) / df_item['LHS_std']
 
         # Calculate final uniqueness score
         df_item['unique_score'] = df_item['zero_z_score'] - df_item['mean_z_score']
